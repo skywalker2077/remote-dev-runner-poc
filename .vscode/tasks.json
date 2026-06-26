@@ -4,65 +4,40 @@
     {
       "label": "Remote Build: Full",
       "type": "shell",
-      "command": "bash",
-      "args": [
-        "-c",
-        "BRANCH=\"remote-build/${USER:-$(git config user.name | tr ' ' '-')}/$(date +%Y%m%d-%H%M%S)\" && git push origin HEAD:\"${BRANCH}\" && echo \"Triggering workflow on ${BRANCH}...\" && gh workflow run remote-build.yml --ref \"${BRANCH}\" -f build_type=full && sleep 3 && RUN_URL=$(gh run list --workflow=remote-build.yml --branch=\"${BRANCH}\" --limit=1 --json url -q '.[0].url') && echo \"Actions run: ${RUN_URL}\" && gh run watch --exit-status"
-      ],
+      "command": "bash .vscode/scripts/remote-build.sh full",
       "group": "build",
       "presentation": {
         "reveal": "always",
-        "panel": "new",
-        "clear": true
-      },
-      "problemMatcher": []
+        "panel": "new"
+      }
     },
     {
       "label": "Remote Build: Test Only",
       "type": "shell",
-      "command": "bash",
-      "args": [
-        "-c",
-        "BRANCH=\"remote-build/${USER:-$(git config user.name | tr ' ' '-')}/$(date +%Y%m%d-%H%M%S)\" && git push origin HEAD:\"${BRANCH}\" && echo \"Triggering test-only build on ${BRANCH}...\" && gh workflow run remote-build.yml --ref \"${BRANCH}\" -f build_type=test-only && sleep 3 && gh run watch --exit-status"
-      ],
+      "command": "bash .vscode/scripts/remote-build.sh test-only",
       "group": "test",
       "presentation": {
         "reveal": "always",
-        "panel": "new",
-        "clear": true
-      },
-      "problemMatcher": []
+        "panel": "new"
+      }
     },
     {
-      "label": "Remote Build: Package",
+      "label": "Remote Build: Package Only",
       "type": "shell",
-      "command": "bash",
-      "args": [
-        "-c",
-        "BRANCH=\"remote-build/${USER:-$(git config user.name | tr ' ' '-')}/$(date +%Y%m%d-%H%M%S)\" && git push origin HEAD:\"${BRANCH}\" && echo \"Triggering package build on ${BRANCH}...\" && gh workflow run remote-build.yml --ref \"${BRANCH}\" -f build_type=package-only && sleep 3 && gh run watch --exit-status"
-      ],
+      "command": "bash .vscode/scripts/remote-build.sh package-only",
       "group": "build",
       "presentation": {
         "reveal": "always",
-        "panel": "new",
-        "clear": true
-      },
-      "problemMatcher": []
+        "panel": "new"
+      }
     },
     {
       "label": "Open GitHub Actions",
       "type": "shell",
-      "command": "bash",
-      "args": [
-        "-c",
-        "RUN_URL=$(gh run list --workflow=remote-build.yml --limit=1 --json url -q '.[0].url') && echo \"Opening: ${RUN_URL}\" && (command -v xdg-open &>/dev/null && xdg-open \"${RUN_URL}\") || echo \"Visit: ${RUN_URL}\""
-      ],
-      "group": "none",
+      "command": "gh run list --limit 1 --json url --jq '.[0].url' | xargs open || xargs xdg-open",
       "presentation": {
-        "reveal": "always",
-        "panel": "shared"
-      },
-      "problemMatcher": []
+        "reveal": "silent"
+      }
     }
   ]
 }

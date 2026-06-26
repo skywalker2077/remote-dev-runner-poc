@@ -1,20 +1,19 @@
 const express = require('express');
-const { name, version } = require('../package.json');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
+const VERSION = process.env.npm_package_version || '1.0.0';
 
-app.get('/health', (_req, res) => {
+app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.get('/version', (_req, res) => {
-  res.json({ name, version });
+app.get('/version', (req, res) => {
+  res.json({ version: VERSION, env: process.env.NODE_ENV || 'development' });
 });
 
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`${name}@${version} listening on port ${PORT}`);
+    console.log(`remote-dev-runner-poc listening on port ${PORT}`);
   });
 }
 

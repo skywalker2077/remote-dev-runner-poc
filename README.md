@@ -1,83 +1,79 @@
 # remote-dev-runner-poc
 
-Personal POC repo for Walker's WDC architecture proposals, using the `skywalker2077` GitHub account.
+POC demonstrating **VS Code Remote SSH + Self-Hosted GitHub Actions Runner** as an alternative to GitHub Codespaces and Microsoft Dev Box.
+
+> Built by [@skywalker2077](https://github.com/skywalker2077) | Avanade DevOps Practice
 
 ---
 
-## Demo 1 — Dev Box + Copilot POC *(previous)*
+## Why this exists
 
-**Branch:** `copilot-devbox-demo`  
-**Presented at:** Avanade Americas DevOps Birds of a Feather call (~200 attendees)  
-**Topic:** Microsoft Dev Box + GitHub Copilot as a cloud developer environment
-
-> Microsoft Dev Box was discontinued in November 2025. This demo is archived for reference.
+| Problem | This POC solves it |
+|---|---|
+| GitHub Codespaces blocked by enterprise IP allow-list | VS Code Remote SSH connects to an Azure VM inside the VNET |
+| Microsoft Dev Box discontinued (Nov 2025) | Standard Azure VM + VS Code SSH = same experience |
+| GitHub-hosted larger runners disabled by security policy | Self-hosted runner (`wdc-ubuntu-latest`) runs inside the Azure VNET |
 
 ---
 
-## Demo 2 — VS Code Remote SSH + Self-Hosted Runner *(this)*
-
-**Branch:** `main`  
-**Audience:** Karsten Strecke (WDC DevOps Lead) · Chris Norotsky (PM)  
-**Purpose:** Validate the VS Code Remote SSH + Self-Hosted Runner architecture as the WDC alternative to Codespaces (blocked) and Dev Box (discontinued)
-
-### Architecture
+## Architecture
 
 ```
 Developer (VS Code local)
-    │ Remote SSH
+    │ Remote SSH (VPN or public IP for POC)
     ▼
-Azure VM (vscode-ssh-demo-vm) ── edit · Copilot · commit
-    │ git push remote-build/<user>/<ts>
+Azure VM (vscode-ssh-demo-vm, eastus2)
+    │ edit · GitHub Copilot · commit
+    │ git push remote-build/<user>/<timestamp>
     ▼
 GitHub (skywalker2077/remote-dev-runner-poc)
     │ GitHub Actions trigger
     ▼
-Runner (ubuntu-latest / wdc: wdc-ubuntu-latest)
-    │ build · test · package
+Runner (ubuntu-latest for POC / wdc-ubuntu-latest for WDC production)
+    │ build · test · package · scan
     ▼
-Artifacts + Logs + PR Checks
+Artifacts + Logs + PR Checks in GitHub Actions
 ```
-
-### Key components
-
-| File | Purpose |
-|------|---------|
-| `scripts/create-azure-vm.sh` | Provision Azure VM in one command |
-| `scripts/setup-dev-vm.sh` | Bootstrap VM with all dev tools |
-| `config/ssh-config.template` | VS Code SSH config template |
-| `.vscode/settings.json` | Remote SSH extension settings |
-| `.vscode/tasks.json` | One-click remote build tasks |
-| `.github/workflows/remote-build.yml` | CI: build · test · package |
-| `.github/workflows/cleanup-remote-build-branches.yml` | Daily branch cleanup |
-| `src/` | Sample Node.js app (Express) |
-| `docs/DEVELOPER_SETUP.md` | Step-by-step setup guide |
-
-### Quick start
-
-```bash
-# 1. Provision the VM (requires az + gh login)
-SSH_KEY_PATH=~/.ssh/vscode_demo_id_rsa ./scripts/create-azure-vm.sh
-
-# 2. Add SSH config (fill in VM IP)
-cat config/ssh-config.template >> ~/.ssh/config
-
-# 3. Connect: VS Code → Remote-SSH: Connect to Host → vscode-ssh-demo
-
-# 4. Trigger build: VS Code → Tasks: Run Task → Remote Build: Full
-```
-
-Full walkthrough: [`docs/DEVELOPER_SETUP.md`](docs/DEVELOPER_SETUP.md)
-
-### WDC Production Mapping
-
-| POC (personal) | WDC Production |
-|---|---|
-| `ubuntu-latest` | `wdc-ubuntu-latest` |
-| Azure VM public IP + port 22 | Azure VM private IP + VPN/Bastion |
-| Personal GitHub repo | `WDC-TEST-PLAYORG` GitHub org |
-| Personal Azure subscription | WDC Azure subscription (Moin/Srini) |
-| SSH key in `~/.ssh` | SSH key via Azure Key Vault |
 
 ---
 
-*Built by Walker Gomes Viana · Avanade · 2026*
+## Quick Start
+
+### 1. Provision the Azure VM
+```bash
+az login
+bash scripts/create-azure-vm.sh
+```
+
+### 2. Bootstrap the VM
+```bash
+ssh -i ~/.ssh/remote_dev_id_rsa devuser@<PUBLIC_IP> 'bash -s' < scripts/setup-dev-vm.sh
+```
+
+### 3. Configure VS Code SSH
+```bash
+sed 's/<AZURE_VM_PUBLIC_IP>/<YOUR_IP>/' config/ssh-config.template >> ~/.ssh/config
+```
+
+Open VS Code → `Remote-SSH: Connect to Host` → `remote-dev-runner`
+
+### 4. Trigger a remote build
+In VS Code: `Tasks: Run Task` → `Remote Build: Full`
+
+---
+
+## WDC Production Mapping
+
+| POC (this repo) | WDC Production |
+|---|---|
+| `ubuntu-latest` | `wdc-ubuntu-latest` |
+| Azure VM public IP + port 22 | Azure VM private IP + VPN/Bastion |
+| `skywalker2077` GitHub account | `WDC-TEST-PLAYORG` GitHub org |
+| Personal Azure subscription | WDC Azure subscription |
+| SSH key in `~/.ssh` | SSH key in Azure Key Vault |
+
+---
+
+## Previous Demo
+
+See [copilot-devbox-demo](https://github.com/skywalker2077/copilot-devbox-demo) for the Dev Box + GitHub Copilot POC presented at the Avanade Americas DevOps Birds of a Feather call.

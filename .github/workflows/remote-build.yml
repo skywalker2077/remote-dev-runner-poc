@@ -16,195 +16,100 @@ on:
     branches:
       - 'remote-build/**'
 
-# NOTE: In WDC production, replace ubuntu-latest with wdc-ubuntu-latest on all jobs below.
-
 jobs:
   setup:
+    name: Setup
     # NOTE: In WDC production, replace ubuntu-latest with wdc-ubuntu-latest
     runs-on: ubuntu-latest
     outputs:
-      build_type: ${{ steps.resolve.outputs.build_type }}
-      artifact_name: ${{ steps.resolve.outputs.artifact_name }}
+      run_url: ${{ steps.run_url.outputs.url }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Print runner info
         run: |
-          echo "Runner OS  : $RUNNER_OS"
-          echo "Runner arch: $RUNNER_ARCH"
-          echo "Runner name: $RUNNER_NAME"
-          echo "Ref        : $GITHUB_REF"
-          echo "SHA        : $GITHUB_SHA"
-          echo "Actor      : $GITHUB_ACTOR"
-
-      - name: Resolve build type
-        id: resolve
-        run: |
-          BUILD_TYPE="${{ github.event.inputs.build_type || 'full' }}"
-          ARTIFACT_NAME="app-$(echo '${{ github.ref_name }}' | tr '/' '-')-${GITHUB_SHA::8}"
-          echo "build_type=${BUILD_TYPE}" >> "$GITHUB_OUTPUT"
-          echo "artifact_name=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
-          echo "Build type : ${BUILD_TYPE}"
-          echo "Artifact   : ${ARTIFACT_NAME}"
+          echo "Runner: $RUNNER_NAME"
+          echo "OS: $RUNNER_OS"
+          echo "Build type: ${{ inputs.build_type }}"
+          echo "Branch: $GITHUB_REF_NAME"
+      - name: Set run URL
+        id: run_url
+        run: echo "url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
 
   build:
+    name: Build
+    needs: setup
     # NOTE: In WDC production, replace ubuntu-latest with wdc-ubuntu-latest
     runs-on: ubuntu-latest
-    needs: setup
-    if: needs.setup.outputs.build_type == 'full' || needs.setup.outputs.build_type == 'package-only'
+    if: ${{ inputs.build_type == 'full' || inputs.build_type == '' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Upload build output
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-output-${{ github.sha }}
-          path: dist/
-          retention-days: 7
-          if-no-files-found: warn
+      - run: npm ci
+      - run: npm run build --if-present
 
   test:
+    name: Test
+    needs: build
     # NOTE: In WDC production, replace ubuntu-latest with wdc-ubuntu-latest
     runs-on: ubuntu-latest
-    needs: setup
-    if: needs.setup.outputs.build_type == 'full' || needs.setup.outputs.build_type == 'test-only'
+    if: ${{ inputs.build_type == 'full' || inputs.build_type == 'test-only' || inputs.build_type == '' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run tests
-        run: npm test -- --ci --reporters=default --reporters=jest-junit
+      - run: npm ci
+      - run: npm test -- --ci --reporters=default --reporters=jest-junit
         env:
           JEST_JUNIT_OUTPUT_DIR: ./test-results
-          JEST_JUNIT_OUTPUT_NAME: results.xml
-
-      - name: Upload test results
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ github.sha }}
+          name: test-results
           path: test-results/
           retention-days: 7
 
   package:
+    name: Package
+    needs: test
     # NOTE: In WDC production, replace ubuntu-latest with wdc-ubuntu-latest
     runs-on: ubuntu-latest
-    needs: [setup, build, test]
-    if: |
-      always() &&
-      needs.setup.result == 'success' &&
-      (needs.setup.outputs.build_type == 'full' || needs.setup.outputs.build_type == 'package-only') &&
-      (needs.build.result == 'success' || needs.build.result == 'skipped')
+    if: ${{ inputs.build_type == 'full' || inputs.build_type == 'package-only' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Download build output
-        if: needs.build.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: build-output-${{ github.sha }}
-          path: dist/
-
-      - name: Create package archive
+      - run: npm ci --omit=dev
+      - name: Create artifact
         run: |
-          ARTIFACT="${{ needs.setup.outputs.artifact_name }}"
-          tar -czf "${ARTIFACT}.tar.gz" \
-            src/ dist/ package.json package-lock.json .nvmrc Dockerfile \
-            --transform "s|^|${ARTIFACT}/|"
-          echo "Created: ${ARTIFACT}.tar.gz ($(du -sh "${ARTIFACT}.tar.gz" | cut -f1))"
-
-      - name: Upload package artifact
-        uses: actions/upload-artifact@v4
+          tar -czf remote-dev-runner-poc-${{ github.sha }}.tar.gz \
+            src/ package.json .nvmrc
+      - uses: actions/upload-artifact@v4
         with:
-          name: ${{ needs.setup.outputs.artifact_name }}
-          path: "*.tar.gz"
+          name: app-package-${{ github.sha }}
+          path: remote-dev-runner-poc-*.tar.gz
           retention-days: 7
 
   summary:
+    name: Summary
+    needs: [build, test, package]
     # NOTE: In WDC production, replace ubuntu-latest with wdc-ubuntu-latest
     runs-on: ubuntu-latest
-    needs: [setup, build, test, package]
     if: always()
     steps:
-      - name: Post build summary
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const buildType = '${{ needs.setup.outputs.build_type }}';
-            const results = {
-              setup:   '${{ needs.build.result }}',
-              build:   '${{ needs.build.result }}',
-              test:    '${{ needs.test.result }}',
-              package: '${{ needs.package.result }}',
-            };
-            const emoji = (r) => ({ success: '✅', failure: '❌', skipped: '⏭️', cancelled: '🚫' }[r] ?? '❓');
-            const rows = Object.entries(results)
-              .map(([j, r]) => `| ${j} | ${emoji(r)} ${r} |`)
-              .join('\n');
-            const summary = [
-              '## Remote Build Summary',
-              '',
-              `**Ref:** \`${{ github.ref_name }}\`  `,
-              `**SHA:** \`${{ github.sha }}\`  `,
-              `**Build type:** \`${buildType}\`  `,
-              `**Triggered by:** ${{ github.actor }}`,
-              '',
-              '| Job | Result |',
-              '|-----|--------|',
-              rows,
-              '',
-              '> **WDC note:** In production this workflow runs on `wdc-ubuntu-latest` self-hosted runners.',
-            ].join('\n');
-            await core.summary.addRaw(summary).write();
-
-      - name: Set PR status
-        if: github.event_name == 'push'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const buildResult = '${{ needs.build.result }}';
-            const testResult  = '${{ needs.test.result }}';
-            const overall = [buildResult, testResult].every(r => r === 'success' || r === 'skipped')
-              ? 'success' : 'failure';
-            await github.rest.repos.createCommitStatus({
-              owner:       context.repo.owner,
-              repo:        context.repo.repo,
-              sha:         context.sha,
-              state:       overall,
-              target_url:  `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              description: `Remote build: ${overall}`,
-              context:     'remote-build/ci',
-            });
+      - name: Post job summary
+        run: |
+          echo "## Remote Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test  | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | ${{ needs.package.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **Runner note:** POC uses \`ubuntu-latest\`. WDC production uses \`wdc-ubuntu-latest\` (self-hosted, Azure VNET)." >> $GITHUB_STEP_SUMMARY

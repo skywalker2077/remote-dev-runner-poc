@@ -1,20 +1,21 @@
 # Developer Setup Guide
 
-VS Code Remote SSH + Self-Hosted GitHub Actions Runner — POC
+VS Code Remote SSH + Self-Hosted GitHub Actions Runner — Step-by-Step
 
-Target audience: mid-level DevOps engineer familiar with Git but new to GitHub Actions self-hosted runners.
+Target audience: mid-level DevOps engineer familiar with Git, new to GitHub Actions self-hosted runners.
 
 ---
 
-## Prerequisites
+## 1. Prerequisites
 
-| Tool | Install |
-|------|---------|
+Install the following tools on your **local machine** before starting:
+
+| Tool | How to install |
+|------|---------------|
 | VS Code | https://code.visualstudio.com |
 | Remote - SSH extension | VS Code → Extensions → `ms-vscode-remote.remote-ssh` |
 | Azure CLI | https://learn.microsoft.com/cli/azure/install-azure-cli |
 | GitHub CLI | https://cli.github.com |
-| SSH key pair | `ssh-keygen -t rsa -b 4096 -f ~/.ssh/vscode_demo_id_rsa -N ""` |
 
 Log in before running the setup scripts:
 
@@ -25,39 +26,72 @@ gh auth login
 
 ---
 
-## Step 1 — Provision the Azure VM
+## 2. Generate SSH Key Pair
+
+Generate a dedicated key pair for this project (do not reuse your personal GitHub key):
 
 ```bash
-# From repo root
-chmod +x scripts/create-azure-vm.sh
-SSH_KEY_PATH=~/.ssh/vscode_demo_id_rsa ./scripts/create-azure-vm.sh
+ssh-keygen -t ed25519 -f ~/.ssh/remote_dev_id_rsa -C "remote-dev-runner-poc"
 ```
 
-The script:
-- Creates VM `vscode-ssh-demo-vm` (Standard_B2s, Ubuntu 22.04) in RG `devbboxdemo`
-- Opens port 22
-- Runs `setup-dev-vm.sh` remotely to install all dev tools
-- Prints the VM's public IP at the end
-
-Expected time: **3–5 minutes**
+This creates:
+- `~/.ssh/remote_dev_id_rsa` — private key (never share this)
+- `~/.ssh/remote_dev_id_rsa.pub` — public key (will be added to the Azure VM)
 
 ---
 
-## Step 2 — Configure VS Code SSH
+## 3. Provision the Azure VM
 
-1. Copy `config/ssh-config.template` to `~/.ssh/config` (append if the file exists):
+From the repo root, run:
 
 ```bash
-cat config/ssh-config.template >> ~/.ssh/config
+bash scripts/create-azure-vm.sh
 ```
 
-2. Replace `<AZURE_VM_PUBLIC_IP>` with the IP printed by the create script:
+The script creates VM `vscode-ssh-demo-vm` (Standard_B2s, Ubuntu 22.04) in resource group `devbboxdemo` (eastus2), opens port 22, and prints the public IP at the end.
+
+Expected time: **3–4 minutes**.
+
+If the VM already exists (idempotent re-run), the script continues and prints the current IP.
+
+---
+
+## 4. Bootstrap the VM
+
+Copy and run the setup script on the VM:
+
+```bash
+ssh -i ~/.ssh/remote_dev_id_rsa devuser@<PUBLIC_IP> 'bash -s' < scripts/setup-dev-vm.sh
+```
+
+This installs on the VM:
+- `git`, `curl`, `wget`, `unzip`, `jq`
+- Docker Engine
+- Node.js LTS via nvm
+- GitHub CLI (`gh`)
+- Azure CLI (`az`)
+- Clones this repo to `~/workspace/remote-dev-runner-poc`
+
+Expected time: **4–6 minutes** on first run, ~1 minute on re-run.
+
+---
+
+## 5. Configure VS Code SSH
+
+Add the VM to your SSH config:
+
+```bash
+# Replace <YOUR_IP> with the public IP from step 3
+sed 's/<AZURE_VM_PUBLIC_IP>/<YOUR_IP>/' config/ssh-config.template >> ~/.ssh/config
+```
+
+The resulting block in `~/.ssh/config`:
 
 ```
-Host vscode-ssh-demo
-  HostName 20.x.x.x        ← replace this
+Host remote-dev-runner
+  HostName 20.x.x.x
   User devuser
-  IdentityFile ~/.ssh/vscode_demo_id_rsa
+  IdentityFile ~/.ssh/remote_dev_id_rsa
   ForwardAgent yes
   ServerAliveInterval 60
   ServerAliveCountMax 10
@@ -65,84 +99,110 @@ Host vscode-ssh-demo
 
 ---
 
-## Step 3 — Connect via VS Code Remote SSH
+## 6. Connect via VS Code Remote SSH
 
-1. Press `F1` → **Remote-SSH: Connect to Host…**
-2. Select **vscode-ssh-demo**
-3. VS Code opens a new window connected to the Azure VM
-4. Extensions listed in `.vscode/settings.json` install automatically on the remote
+1. Open VS Code on your local machine
+2. Press `F1` → **Remote-SSH: Connect to Host…**
+3. Select **remote-dev-runner**
+4. VS Code opens a new window connected to the Azure VM
+5. Extensions in `.vscode/settings.json` (Copilot, GitLens, Python, Docker) install automatically on the remote
 
-You are now editing files **on the Azure VM** through your local VS Code.
+You are now editing files **on the Azure VM** as if they were local. Copilot suggestions come from your local VS Code license but execute through the SSH tunnel.
 
 ---
 
-## Step 4 — Edit & Commit
+## 7. Daily Workflow (edit → commit → remote build)
 
-Work exactly as you would locally:
+Inside the VS Code Remote SSH window:
 
 ```bash
 cd ~/workspace/remote-dev-runner-poc
 git checkout -b feature/my-change
-# ... edit files ...
+
+# ... edit files with VS Code, Copilot assists inline ...
+
 git add .
 git commit -m "my change"
 ```
 
-GitHub Copilot (if installed) works transparently over the SSH tunnel.
+To trigger a remote build without leaving VS Code:
 
----
-
-## Step 5 — Trigger a Remote Build
-
-Open the VS Code Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
-
-1. **Tasks: Run Task**
-2. Choose one of:
+1. `Ctrl+Shift+P` → **Tasks: Run Task**
+2. Choose:
    - **Remote Build: Full** — install + build + test + package
-   - **Remote Build: Test Only** — install + test
-   - **Remote Build: Package** — install + build + package
+   - **Remote Build: Test Only** — install + test only
+   - **Remote Build: Package Only** — install + package only
 
-What happens under the hood:
-1. A branch `remote-build/<username>/<timestamp>` is pushed to GitHub
-2. `gh workflow run remote-build.yml` triggers the Actions workflow
-3. `gh run watch` streams the logs live in the VS Code terminal
-4. The Actions URL is printed at the end
-
-Expected time: **~2 minutes** for a full build on `ubuntu-latest`.
+What `.vscode/scripts/remote-build.sh` does:
+1. Creates a timestamped branch: `remote-build/<username>/<timestamp>`
+2. Pushes it to GitHub
+3. Waits 3 seconds for the Actions runner to pick up the run
+4. Runs `gh run watch` to stream logs live in the VS Code terminal
 
 ---
 
-## Step 6 — Read Results
+## 8. Reading Results in GitHub Actions
 
-- **Logs** — streamed in VS Code terminal, also at GitHub → Actions tab
-- **Artifacts** — `.tar.gz` package available for 7 days under the Actions run
-- **PR status check** — `remote-build/ci` check appears on any open PR targeting the same SHA
+After a build completes:
 
-To open the last run in a browser:
+- **Logs** — streamed live in the VS Code terminal; also visible at GitHub → Actions tab
+- **Test results** — JUnit XML uploaded as artifact (`test-results/`) — available for 7 days
+- **Package** — `.tar.gz` artifact uploaded (`app-package-<sha>`) — available for 7 days
+- **Job summary** — build/test/package status table posted under the Actions run summary tab
+- **PR check** — if a PR targets the same SHA, the `remote-build/ci` status check appears
+
+To open the last run directly:
 
 **Tasks: Run Task → Open GitHub Actions**
 
 ---
 
-## Step 7 — Remote Build Branches are Auto-Cleaned
+## 9. Troubleshooting
 
-A scheduled workflow (`cleanup-remote-build-branches.yml`) runs daily at 02:00 UTC and deletes all `remote-build/**` branches older than 7 days. No manual cleanup needed.
+**SSH timeout when connecting**
+- Verify the VM is running: `az vm show -g devbboxdemo -n vscode-ssh-demo-vm --show-details --query powerState`
+- Start it if stopped: `az vm start -g devbboxdemo -n vscode-ssh-demo-vm`
+- Check port 22 is open: `az network nsg rule list -g devbboxdemo --nsg-name vscode-ssh-demo-vmNSG`
+
+**`gh run watch` shows "no runs found"**
+- The push may have taken longer than 3 seconds to trigger the workflow. Run manually:
+  ```bash
+  gh run list --branch remote-build/<your-branch> --limit 5
+  ```
+
+**Docker permission denied on VM**
+- The `setup-dev-vm.sh` adds `$USER` to the docker group, but the change only takes effect in new shell sessions.
+- Fix: `newgrp docker` or log out and back in via VS Code Remote SSH (Disconnect → Reconnect).
+
+**`nvm: command not found` in VS Code terminal**
+- nvm is sourced in `.bashrc` but not in non-login shells. Add to `~/.bashrc`:
+  ```bash
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+  ```
+  Then reload: `source ~/.bashrc`
+
+**VPN not connected (WDC production)**
+- In WDC production, the Azure VM uses a private IP — you must connect via the WDC VPN or Azure Bastion before opening VS Code Remote SSH.
+- For the POC (public IP), no VPN is required.
 
 ---
 
-## WDC Production Mapping
+## 10. WDC Production Mapping
 
-| POC (personal) | WDC Production |
+| POC (this repo) | WDC Production |
 |---|---|
 | `ubuntu-latest` runner | `wdc-ubuntu-latest` self-hosted runner |
-| Azure VM public IP + port 22 | Azure VM private IP + VPN / Azure Bastion |
+| Azure VM public IP + port 22 | Azure VM private IP + WDC VPN / Azure Bastion |
 | `skywalker2077/remote-dev-runner-poc` | `WDC-TEST-PLAYORG` GitHub org repo |
 | Personal Azure subscription | WDC Azure subscription (Moin / Srini) |
 | SSH key in `~/.ssh` | SSH key managed via Azure Key Vault |
-| `devuser` local sudo | AD/Entra ID managed identity |
+| `devuser` local sudo | Entra ID (Azure AD) managed identity |
 
-To move from POC to WDC production:
-1. Replace `ubuntu-latest` → `wdc-ubuntu-latest` in both workflow files (search for the `# NOTE:` comments)
-2. Update `RESOURCE_GROUP` and `LOCATION` in `scripts/create-azure-vm.sh`
-3. Remove public IP / port 22 exposure; use Bastion or VPN for SSH access
-4. Swap SSH key management to Azure Key Vault
+**How to migrate from POC to WDC production:**
+
+1. Replace `ubuntu-latest` → `wdc-ubuntu-latest` in both workflow files (search for `# NOTE:` comments)
+2. Update `RG`, `LOCATION`, and `VM_SIZE` in `scripts/create-azure-vm.sh` to WDC values
+3. Remove the public IP / NSG port 22 rule; configure Bastion or VPN for SSH access
+4. Store the SSH private key in Azure Key Vault; retrieve it at connection time
+5. Transfer the repo to `WDC-TEST-PLAYORG` and update the remote URL in `setup-dev-vm.sh`

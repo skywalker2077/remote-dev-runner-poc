@@ -1,7 +1,14 @@
-Host vscode-ssh-demo
+# VS Code Remote SSH — remote-dev-runner-poc
+# Copy this block to ~/.ssh/config and replace <AZURE_VM_PUBLIC_IP>
+
+Host remote-dev-runner
   HostName <AZURE_VM_PUBLIC_IP>
   User devuser
-  IdentityFile ~/.ssh/vscode_demo_id_rsa
+  IdentityFile ~/.ssh/remote_dev_id_rsa
   ForwardAgent yes
   ServerAliveInterval 60
   ServerAliveCountMax 10
+
+# Generate your SSH key pair with:
+#   ssh-keygen -t ed25519 -f ~/.ssh/remote_dev_id_rsa -C "remote-dev-runner-poc"
+# Then add the public key to the Azure VM during provisioning.
