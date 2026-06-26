@@ -17,4 +17,8 @@ if (require.main === module) {
   });
 }
 
+app.get('/demo', (req, res) => {
+  res.json({ message: 'WDC Remote Dev Runner POC', date: new Date().toISOString() });
+});
+
 module.exports = app;
