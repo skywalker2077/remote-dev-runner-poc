@@ -1,0 +1,12 @@
+{
+  "remote.SSH.defaultExtensions": [
+    "github.copilot",
+    "github.copilot-chat",
+    "ms-python.python",
+    "eamodio.gitlens",
+    "ms-azuretools.vscode-docker"
+  ],
+  "remote.SSH.connectTimeout": 60,
+  "git.autofetch": true,
+  "terminal.integrated.defaultProfile.linux": "bash"
+}

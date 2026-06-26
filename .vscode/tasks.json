@@ -1,0 +1,68 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Remote Build: Full",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "BRANCH=\"remote-build/${USER:-$(git config user.name | tr ' ' '-')}/$(date +%Y%m%d-%H%M%S)\" && git push origin HEAD:\"${BRANCH}\" && echo \"Triggering workflow on ${BRANCH}...\" && gh workflow run remote-build.yml --ref \"${BRANCH}\" -f build_type=full && sleep 3 && RUN_URL=$(gh run list --workflow=remote-build.yml --branch=\"${BRANCH}\" --limit=1 --json url -q '.[0].url') && echo \"Actions run: ${RUN_URL}\" && gh run watch --exit-status"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Remote Build: Test Only",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "BRANCH=\"remote-build/${USER:-$(git config user.name | tr ' ' '-')}/$(date +%Y%m%d-%H%M%S)\" && git push origin HEAD:\"${BRANCH}\" && echo \"Triggering test-only build on ${BRANCH}...\" && gh workflow run remote-build.yml --ref \"${BRANCH}\" -f build_type=test-only && sleep 3 && gh run watch --exit-status"
+      ],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Remote Build: Package",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "BRANCH=\"remote-build/${USER:-$(git config user.name | tr ' ' '-')}/$(date +%Y%m%d-%H%M%S)\" && git push origin HEAD:\"${BRANCH}\" && echo \"Triggering package build on ${BRANCH}...\" && gh workflow run remote-build.yml --ref \"${BRANCH}\" -f build_type=package-only && sleep 3 && gh run watch --exit-status"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Open GitHub Actions",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "RUN_URL=$(gh run list --workflow=remote-build.yml --limit=1 --json url -q '.[0].url') && echo \"Opening: ${RUN_URL}\" && (command -v xdg-open &>/dev/null && xdg-open \"${RUN_URL}\") || echo \"Visit: ${RUN_URL}\""
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

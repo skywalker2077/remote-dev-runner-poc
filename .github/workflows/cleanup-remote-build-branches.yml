@@ -1,0 +1,57 @@
+name: Cleanup Remote Build Branches
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch: {}
+
+# NOTE: In WDC production, replace ubuntu-latest with wdc-ubuntu-latest
+
+jobs:
+  cleanup:
+    # NOTE: In WDC production, replace ubuntu-latest with wdc-ubuntu-latest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete remote-build branches older than 7 days
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          CUTOFF=$(date -d '7 days ago' +%s)
+          DELETED=0
+          KEPT=0
+
+          echo "Scanning branches matching 'remote-build/**' older than 7 days..."
+
+          while IFS= read -r branch; do
+            LAST_COMMIT_DATE=$(gh api \
+              "repos/${REPO}/branches/${branch}" \
+              --jq '.commit.commit.committer.date' 2>/dev/null || echo "")
+
+            if [[ -z "${LAST_COMMIT_DATE}" ]]; then
+              echo "  SKIP (no date): ${branch}"
+              continue
+            fi
+
+            BRANCH_TS=$(date -d "${LAST_COMMIT_DATE}" +%s)
+
+            if (( BRANCH_TS < CUTOFF )); then
+              echo "  DELETE: ${branch} (last commit: ${LAST_COMMIT_DATE})"
+              gh api \
+                --method DELETE \
+                "repos/${REPO}/git/refs/heads/${branch}" || echo "  WARN: failed to delete ${branch}"
+              (( DELETED++ )) || true
+            else
+              echo "  KEEP  : ${branch} (last commit: ${LAST_COMMIT_DATE})"
+              (( KEPT++ )) || true
+            fi
+          done < <(gh api "repos/${REPO}/branches" \
+            --paginate \
+            --jq '.[].name | select(startswith("remote-build/"))')
+
+          echo ""
+          echo "Done. Deleted: ${DELETED} | Kept: ${KEPT}"

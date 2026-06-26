@@ -1,0 +1,7 @@
+Host vscode-ssh-demo
+  HostName <AZURE_VM_PUBLIC_IP>
+  User devuser
+  IdentityFile ~/.ssh/vscode_demo_id_rsa
+  ForwardAgent yes
+  ServerAliveInterval 60
+  ServerAliveCountMax 10

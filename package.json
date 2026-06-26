@@ -1,0 +1,25 @@
+{
+  "name": "remote-dev-runner-poc",
+  "version": "0.1.0",
+  "description": "POC: VS Code Remote SSH + Self-Hosted GitHub Actions Runner",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "build": "mkdir -p dist && cp -r src dist/ && echo 'Build complete'",
+    "test": "jest --testPathPattern='src/.*\\.test\\.js$'"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-junit": "^16.0.0",
+    "supertest": "^6.3.4"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "reporters": [
+      "default"
+    ]
+  }
+}
