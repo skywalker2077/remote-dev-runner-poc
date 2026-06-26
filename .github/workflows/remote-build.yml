@@ -78,7 +78,7 @@ jobs:
     needs: test
     # NOTE: In WDC production, replace ubuntu-latest with wdc-ubuntu-latest
     runs-on: ubuntu-latest
-    if: ${{ inputs.build_type == 'full' || inputs.build_type == 'package-only' }}
+    if: ${{ inputs.build_type == 'full' || inputs.build_type == 'package-only' || inputs.build_type == '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

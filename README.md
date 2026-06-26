@@ -129,6 +129,8 @@ Tests: 2 passed | Coverage: 83.33%
 | 2 | `gh repo clone` in `setup-dev-vm.sh` requires prior `gh auth login` on the VM | Low | Use `git clone https://...` for initial clone; `gh auth login` on first interactive session |
 | 3 | `actions/checkout@v4`, `setup-node@v4`, `upload-artifact@v4` emit Node.js 20 deprecation warning | Info | Non-blocking for POC; upgrade to `@v5` before WDC production handoff |
 | 4 | Public IP changes on VM deallocation | Low | Document; use Azure Bastion or static IP in production |
+| 5 | `Package` job skipped on `push` trigger — missing `\|\| inputs.build_type == ''` condition | Low | Fixed in `remote-build.yml` — Package now runs on push as well as `workflow_dispatch` |
+| 6 | VM git push requires credentials — `gh repo clone` / `git push` fail without prior auth | Low | One-time setup: `git config credential.helper store` + token in `~/.git-credentials` via `gh auth token` |
 
 ---
 

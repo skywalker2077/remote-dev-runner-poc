@@ -26,6 +26,13 @@ gh auth status
 cd ~/workspace/remote-dev-runner-poc   # or C:\VS\remote-dev-runner-poc
 git status
 # Expected: nothing to commit
+
+# 5. Git credentials on the VM (one-time — skip if already done)
+GH_TOKEN=$(gh auth token)
+ssh -i ~/.ssh/remote_dev_id_rsa devuser@20.122.73.183 \
+  "git config --global credential.helper store && \
+   printf 'https://skywalker2077:%s@github.com\n' '${GH_TOKEN}' > ~/.git-credentials && \
+   chmod 600 ~/.git-credentials && echo 'Credentials OK'"
 ```
 
 If VM is deallocated:
