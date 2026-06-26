@@ -31,12 +31,12 @@ sudo apt-get install -y docker-ce docker-ce-cli containerd.io
 sudo usermod -aG docker "$USER"
 
 # Node.js via nvm
+# Note: avoid `set -u` around nvm — it uses unbound vars internally
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 export NVM_DIR="$HOME/.nvm"
 # shellcheck source=/dev/null
-source "$NVM_DIR/nvm.sh"
+set +u; source "$NVM_DIR/nvm.sh"; set -u
 nvm install --lts
-nvm use --lts
 
 # GitHub CLI
 curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
@@ -49,11 +49,11 @@ sudo apt-get install -y gh
 # Azure CLI
 curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
-# Clone repo
+# Clone repo via HTTPS (gh auth not available on first run)
 mkdir -p "$HOME/workspace"
 cd "$HOME/workspace"
 if [ ! -d "remote-dev-runner-poc" ]; then
-  gh repo clone skywalker2077/remote-dev-runner-poc
+  git clone https://github.com/skywalker2077/remote-dev-runner-poc.git
 fi
 
 echo ""
